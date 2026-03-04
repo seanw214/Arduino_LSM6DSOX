@@ -51,11 +51,12 @@
 
 LSM6DSOXClass::LSM6DSOXClass(TwoWire& wire, uint8_t slaveAddress) :
   _wire(&wire),
-  _spi(NULL),
+  //_spi(NULL),
   _slaveAddress(slaveAddress)
 {
 }
 
+/*
 LSM6DSOXClass::LSM6DSOXClass(SPIClass& spi, int csPin, int irqPin) :
   _wire(NULL),
   _spi(&spi),
@@ -64,6 +65,7 @@ LSM6DSOXClass::LSM6DSOXClass(SPIClass& spi, int csPin, int irqPin) :
   _spiSettings(10E6, MSBFIRST, SPI_MODE0)
 {
 }
+*/
 
 LSM6DSOXClass::~LSM6DSOXClass()
 {
@@ -71,12 +73,21 @@ LSM6DSOXClass::~LSM6DSOXClass()
 
 int LSM6DSOXClass::begin()
 {
+  /*
   if (_spi != NULL) {
     pinMode(_csPin, OUTPUT);
     digitalWrite(_csPin, HIGH);
     _spi->begin();
   } else {
     _wire->begin();
+  }
+  */
+
+  int ret = _wire->begin();
+  if (ret != 0)
+  {
+    printf("_wire->begin() error! %d\n", ret);
+    return ret;
   }
 
   if (!(readRegister(LSM6DSOX_WHO_AM_I_REG) == 0x6C || readRegister(LSM6DSOX_WHO_AM_I_REG) == 0x69)) {
@@ -102,6 +113,7 @@ int LSM6DSOXClass::begin()
 
 void LSM6DSOXClass::end()
 {
+  /*
   if (_spi != NULL) {
     _spi->end();
     digitalWrite(_csPin, LOW);
@@ -111,6 +123,11 @@ void LSM6DSOXClass::end()
     writeRegister(LSM6DSOX_CTRL1_XL, 0x00);
     _wire->end();
   }
+  */
+
+  writeRegister(LSM6DSOX_CTRL2_G, 0x00);
+  writeRegister(LSM6DSOX_CTRL1_XL, 0x00);
+  _wire->end();
 }
 
 int LSM6DSOXClass::readAcceleration(float& x, float& y, float& z)
@@ -229,6 +246,7 @@ int LSM6DSOXClass::readRegister(uint8_t address)
 
 int LSM6DSOXClass::readRegisters(uint8_t address, uint8_t* data, size_t length)
 {
+  /*
   if (_spi != NULL) {
     _spi->beginTransaction(_spiSettings);
     digitalWrite(_csPin, LOW);
@@ -252,11 +270,28 @@ int LSM6DSOXClass::readRegisters(uint8_t address, uint8_t* data, size_t length)
       *data++ = _wire->read();
     }
   }
+  */
+
+  _wire->beginTransmission(_slaveAddress);
+  _wire->write(address);
+
+  if (_wire->endTransmission(false) != 0) {
+    return -1;
+  }
+
+  if (_wire->requestFrom(_slaveAddress, length) != length) {
+    return 0;
+  }
+
+  for (size_t i = 0; i < length; i++) {
+    *data++ = _wire->read();
+  }
   return 1;
 }
 
 int LSM6DSOXClass::writeRegister(uint8_t address, uint8_t value)
 {
+  /*
   if (_spi != NULL) {
     _spi->beginTransaction(_spiSettings);
     digitalWrite(_csPin, LOW);
@@ -272,6 +307,15 @@ int LSM6DSOXClass::writeRegister(uint8_t address, uint8_t value)
       return 0;
     }
   }
+  */
+  
+  _wire->beginTransmission(_slaveAddress);
+  _wire->write(address);
+  _wire->write(value);
+  if (_wire->endTransmission() != 0) {
+    return 0;
+  }
+
   return 1;
 }
 
