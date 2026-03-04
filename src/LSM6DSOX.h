@@ -17,10 +17,6 @@
   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 */
 
-//#include <Arduino.h>
-//#include <Wire.h>
-//#include <SPI.h>
-
 #include "../../WirePort/Wire.h"
 #include <math.h>
 #include <iostream>
@@ -28,7 +24,6 @@
 class LSM6DSOXClass {
   public:
     LSM6DSOXClass(TwoWire& wire, uint8_t slaveAddress);
-    //LSM6DSOXClass(SPIClass& spi, int csPin, int irqPin);
     ~LSM6DSOXClass();
 
     int begin();
@@ -49,20 +44,16 @@ class LSM6DSOXClass {
     int readTemperatureFloat(float& temperature_deg);
     int temperatureAvailable();
 
-  private:
     int readRegister(uint8_t address);
+
+  private:
     int readRegisters(uint8_t address, uint8_t* data, size_t length);
     int writeRegister(uint8_t address, uint8_t value);
 
 
   private:
     TwoWire* _wire;
-    //SPIClass* _spi;
     uint8_t _slaveAddress;
-    //int _csPin;
-    //int _irqPin;
-
-    //SPISettings _spiSettings;
 };
 
 extern LSM6DSOXClass IMU_LSM6DSOX;

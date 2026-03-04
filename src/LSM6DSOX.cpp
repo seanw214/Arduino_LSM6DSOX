@@ -48,24 +48,20 @@
 #define LSM6DSOX_OUTZ_L_XL          0X2C
 #define LSM6DSOX_OUTZ_H_XL          0X2D
 
+#define LSM6DSOX_FIFO_CTRL1         0x07
+#define LSM6DSOX_FIFO_CTRL2         0x08
+#define LSM6DSOX_FIFO_CTRL3         0x09
+#define LSM6DSOX_FIFO_CTRL4         0x0A
+#define LSM6DSOX_INT1_CTRL          0x0D
+#define LSM6DSOX_FIFO_STATUS1       0x3A
+#define LSM6DSOX_FIFO_STATUS2       0x3B
+
 
 LSM6DSOXClass::LSM6DSOXClass(TwoWire& wire, uint8_t slaveAddress) :
   _wire(&wire),
-  //_spi(NULL),
   _slaveAddress(slaveAddress)
 {
 }
-
-/*
-LSM6DSOXClass::LSM6DSOXClass(SPIClass& spi, int csPin, int irqPin) :
-  _wire(NULL),
-  _spi(&spi),
-  _csPin(csPin),
-  _irqPin(irqPin),
-  _spiSettings(10E6, MSBFIRST, SPI_MODE0)
-{
-}
-*/
 
 LSM6DSOXClass::~LSM6DSOXClass()
 {
@@ -73,16 +69,6 @@ LSM6DSOXClass::~LSM6DSOXClass()
 
 int LSM6DSOXClass::begin()
 {
-  /*
-  if (_spi != NULL) {
-    pinMode(_csPin, OUTPUT);
-    digitalWrite(_csPin, HIGH);
-    _spi->begin();
-  } else {
-    _wire->begin();
-  }
-  */
-
   int ret = _wire->begin();
   if (ret != 0)
   {
@@ -95,36 +81,60 @@ int LSM6DSOXClass::begin()
     return 0;
   }
 
-  //set the gyroscope control register to work at 104 Hz, 2000 dps and in bypass mode
-  writeRegister(LSM6DSOX_CTRL2_G, 0x4C);
+  //set the gyroscope control register to work at 833Hz, 1000 dps and in bypass mode
+  writeRegister(LSM6DSOX_CTRL2_G, 0x78);
 
-  // Set the Accelerometer control register to work at 104 Hz, 4 g,and in bypass mode and enable ODR/4
+  // Set the Accelerometer control register to work at 833Hz, 8g, and in bypass mode and enable ODR/4
   // low pass filter (check figure9 of LSM6DSOX's datasheet)
-  writeRegister(LSM6DSOX_CTRL1_XL, 0x4A);
+  writeRegister(LSM6DSOX_CTRL1_XL, 0x7E);
 
   // set gyroscope power mode to high performance and bandwidth to 16 MHz
   writeRegister(LSM6DSOX_CTRL7_G, 0x00);
 
-  // Set the ODR config register to ODR/4
-  writeRegister(LSM6DSOX_CTRL8_XL, 0x09);
+  /*
+  odr/4
+  hpf reference mode disabled
+  fast settle mode disabled
+  high pass slope disabled
+  accelerometer full scale mode enabled
+  lpf on 6d disabled
+  */
+  writeRegister(LSM6DSOX_CTRL8_XL, 0x02);
+
+  // set INT1 to trigger when FIFO threshold is reached
+  writeRegister(LSM6DSOX_INT1_CTRL, 0x08);
+
+  // set FIFO watermark level
+  /*
+  1 sensor sample (x y z) = 3 16-bit words
+
+  16 gyro samples * 3 axes = 48 16-bit words
+  16 accel samples * 3 axes = 48 16-bit words
+
+  32 total samples = FIFO watermark level 96 words
+  */
+  writeRegister(LSM6DSOX_FIFO_CTRL1, 0x60);
+
+  // stop FIFO at watermark threshold level
+  writeRegister(LSM6DSOX_FIFO_CTRL2, 0x80);
+
+  // set fifo gyro/accel data rate to 833Hz
+  writeRegister(LSM6DSOX_FIFO_CTRL3, 0x77);
+
+  /** Set FIFO operation mode. Available values are:
+   * 0x00 LSM6DSOX_BYPASS_MODE: FIFO is not used, the buffer content is cleared
+   * LSM6DSOX_FIFO_MODE: bufer continues filling until it becomes full. Then it stops collecting data.
+   * 0x06 LSM6DSOX_STREAM_MODE: continuous mode. Older data are replaced by the new data.
+   * LSM6DSOX_STREAM_TO_FIFO_MODE: FIFO buffer starts operating in Continuous mode and switches to FIFO mode when an event condition occurs.
+   * LSM6DSOX_BYPASS_TO_STREAM_MODE: FIFO buffer starts operating in Bypass mode and switches to Continuous mode when an event condition occurs.
+  **/
+  writeRegister(LSM6DSOX_FIFO_CTRL4, 0x06);
 
   return 1;
 }
 
 void LSM6DSOXClass::end()
 {
-  /*
-  if (_spi != NULL) {
-    _spi->end();
-    digitalWrite(_csPin, LOW);
-    pinMode(_csPin, INPUT);
-  } else {
-    writeRegister(LSM6DSOX_CTRL2_G, 0x00);
-    writeRegister(LSM6DSOX_CTRL1_XL, 0x00);
-    _wire->end();
-  }
-  */
-
   writeRegister(LSM6DSOX_CTRL2_G, 0x00);
   writeRegister(LSM6DSOX_CTRL1_XL, 0x00);
   _wire->end();
@@ -142,9 +152,12 @@ int LSM6DSOXClass::readAcceleration(float& x, float& y, float& z)
     return 0;
   }
 
-  x = data[0] * 4.0 / 32768.0;
-  y = data[1] * 4.0 / 32768.0;
-  z = data[2] * 4.0 / 32768.0;
+  // TODO: set g programmatically during init
+  const float g = 8.0f;
+
+  x = data[0] * g / 32768.0;
+  y = data[1] * g / 32768.0;
+  z = data[2] * g / 32768.0;
 
   return 1;
 }
@@ -160,7 +173,8 @@ int LSM6DSOXClass::accelerationAvailable()
 
 float LSM6DSOXClass::accelerationSampleRate()
 {
-  return 104.0F;
+  // TODO: set samplerate programmatically during init
+  return 833.0F;
 }
 
 int LSM6DSOXClass::readGyroscope(float& x, float& y, float& z)
@@ -175,9 +189,12 @@ int LSM6DSOXClass::readGyroscope(float& x, float& y, float& z)
     return 0;
   }
 
-  x = data[0] * 2000.0 / 32768.0;
-  y = data[1] * 2000.0 / 32768.0;
-  z = data[2] * 2000.0 / 32768.0;
+  // TODO: set dps programmatically during init
+  const float dps = 1000.0f;
+
+  x = data[0] * dps / 32768.0;
+  y = data[1] * dps / 32768.0;
+  z = data[2] * dps / 32768.0;
 
   return 1;
 }
@@ -230,7 +247,8 @@ int LSM6DSOXClass::temperatureAvailable()
 
 float LSM6DSOXClass::gyroscopeSampleRate()
 {
-  return 104.0F;
+  // TODO: set samplerate programmatically during init
+  return 833.0F;
 }
 
 int LSM6DSOXClass::readRegister(uint8_t address)
@@ -246,32 +264,6 @@ int LSM6DSOXClass::readRegister(uint8_t address)
 
 int LSM6DSOXClass::readRegisters(uint8_t address, uint8_t* data, size_t length)
 {
-  /*
-  if (_spi != NULL) {
-    _spi->beginTransaction(_spiSettings);
-    digitalWrite(_csPin, LOW);
-    _spi->transfer(0x80 | address);
-    _spi->transfer(data, length);
-    digitalWrite(_csPin, HIGH);
-    _spi->endTransaction();
-  } else {
-    _wire->beginTransmission(_slaveAddress);
-    _wire->write(address);
-
-    if (_wire->endTransmission(false) != 0) {
-      return -1;
-    }
-
-    if (_wire->requestFrom(_slaveAddress, length) != length) {
-      return 0;
-    }
-
-    for (size_t i = 0; i < length; i++) {
-      *data++ = _wire->read();
-    }
-  }
-  */
-
   _wire->beginTransmission(_slaveAddress);
   _wire->write(address);
 
@@ -291,23 +283,6 @@ int LSM6DSOXClass::readRegisters(uint8_t address, uint8_t* data, size_t length)
 
 int LSM6DSOXClass::writeRegister(uint8_t address, uint8_t value)
 {
-  /*
-  if (_spi != NULL) {
-    _spi->beginTransaction(_spiSettings);
-    digitalWrite(_csPin, LOW);
-    _spi->transfer(address);
-    _spi->transfer(value);
-    digitalWrite(_csPin, HIGH);
-    _spi->endTransaction();
-  } else {
-    _wire->beginTransmission(_slaveAddress);
-    _wire->write(address);
-    _wire->write(value);
-    if (_wire->endTransmission() != 0) {
-      return 0;
-    }
-  }
-  */
   
   _wire->beginTransmission(_slaveAddress);
   _wire->write(address);
