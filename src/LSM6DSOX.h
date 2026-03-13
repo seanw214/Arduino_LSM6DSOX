@@ -59,36 +59,17 @@
 #define LSM6DSOX_FIFO_STATUS2 0x3B
 #define LSM6DSOX_FIFO_DATA_OUT_TAG 0x78
 
+#define LSM6DSOX_FIFO_DATA_OUT_X_L            0x79
+#define LSM6DSOX_FIFO_DATA_OUT_X_H            0x7A
+#define LSM6DSOX_FIFO_DATA_OUT_Y_L            0x7B
+#define LSM6DSOX_FIFO_DATA_OUT_Y_H            0x7C
+#define LSM6DSOX_FIFO_DATA_OUT_Z_L            0x7D
+#define LSM6DSOX_FIFO_DATA_OUT_Z_H            0x7E
+
 class LSM6DSOXClass
 {
 public:
   int fd;
-
-  typedef enum
-  {
-    LSM6DSOX_GYRO_NC_TAG = 1,
-    LSM6DSOX_XL_NC_TAG,
-    LSM6DSOX_TEMPERATURE_TAG,
-    LSM6DSOX_TIMESTAMP_TAG,
-    LSM6DSOX_CFG_CHANGE_TAG,
-    LSM6DSOX_XL_NC_T_2_TAG,
-    LSM6DSOX_XL_NC_T_1_TAG,
-    LSM6DSOX_XL_2XC_TAG,
-    LSM6DSOX_XL_3XC_TAG,
-    LSM6DSOX_GYRO_NC_T_2_TAG,
-    LSM6DSOX_GYRO_NC_T_1_TAG,
-    LSM6DSOX_GYRO_2XC_TAG,
-    LSM6DSOX_GYRO_3XC_TAG,
-    LSM6DSOX_SENSORHUB_SLAVE0_TAG,
-    LSM6DSOX_SENSORHUB_SLAVE1_TAG,
-    LSM6DSOX_SENSORHUB_SLAVE2_TAG,
-    LSM6DSOX_SENSORHUB_SLAVE3_TAG,
-    LSM6DSOX_STEP_CPUNTER_TAG,
-    LSM6DSOX_GAME_ROTATION_TAG,
-    LSM6DSOX_GEOMAG_ROTATION_TAG,
-    LSM6DSOX_ROTATION_TAG,
-    LSM6DSOX_SENSORHUB_NACK_TAG = 0x19,
-  } lsm6dsox_fifo_tag_t;
 
   LSM6DSOXClass(TwoWire &wire, uint8_t slaveAddress);
   ~LSM6DSOXClass();
@@ -100,11 +81,13 @@ public:
   int readAcceleration(float &x, float &y, float &z); // Results are in g (earth gravity).
   float accelerationSampleRate();                     // Sampling rate of the sensor.
   int accelerationAvailable();                        // Check for available data from accelerometer
+  int readFifoAcceleration(float& x, float& y, float& z);
 
   // Gyroscope
   int readGyroscope(float &x, float &y, float &z); // Results are in degrees/second.
   float gyroscopeSampleRate();                     // Sampling rate of the sensor.
   int gyroscopeAvailable();                        // Check for available data from gyroscope
+  int readFifoGyroscope(float& x, float& y, float& z);
 
   // Temperature
   int readTemperature(int &temperature_deg);
@@ -113,7 +96,7 @@ public:
 
   int readRegister(uint8_t address);
   int readRegister(uint8_t address, uint8_t* buf);
-  int readRegisters(uint8_t address, uint8_t *data, size_t length);
+  int readRegisters(uint8_t address, uint8_t* data, size_t length);
 
 private:
   int writeRegister(uint8_t address, uint8_t value);

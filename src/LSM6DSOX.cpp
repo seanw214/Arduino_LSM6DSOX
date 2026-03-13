@@ -19,44 +19,6 @@
 
 #include "LSM6DSOX.h"
 
-// #define LSM6DSOX_ADDRESS            0x6A
-
-// #define LSM6DSOX_WHO_AM_I_REG       0X0F
-// #define LSM6DSOX_CTRL1_XL           0X10
-// #define LSM6DSOX_CTRL2_G            0X11
-
-// #define LSM6DSOX_STATUS_REG         0X1E
-
-// #define LSM6DSOX_CTRL6_C            0X15
-// #define LSM6DSOX_CTRL7_G            0X16
-// #define LSM6DSOX_CTRL8_XL           0X17
-
-// #define LSM6DSOX_OUT_TEMP_L         0X20
-// #define LSM6DSOX_OUT_TEMP_H         0X21
-
-// #define LSM6DSOX_OUTX_L_G           0X22
-// #define LSM6DSOX_OUTX_H_G           0X23
-// #define LSM6DSOX_OUTY_L_G           0X24
-// #define LSM6DSOX_OUTY_H_G           0X25
-// #define LSM6DSOX_OUTZ_L_G           0X26
-// #define LSM6DSOX_OUTZ_H_G           0X27
-
-// #define LSM6DSOX_OUTX_L_XL          0X28
-// #define LSM6DSOX_OUTX_H_XL          0X29
-// #define LSM6DSOX_OUTY_L_XL          0X2A
-// #define LSM6DSOX_OUTY_H_XL          0X2B
-// #define LSM6DSOX_OUTZ_L_XL          0X2C
-// #define LSM6DSOX_OUTZ_H_XL          0X2D
-
-// #define LSM6DSOX_FIFO_CTRL1         0x07
-// #define LSM6DSOX_FIFO_CTRL2         0x08
-// #define LSM6DSOX_FIFO_CTRL3         0x09
-// #define LSM6DSOX_FIFO_CTRL4         0x0A
-// #define LSM6DSOX_INT1_CTRL          0x0D
-// #define LSM6DSOX_FIFO_STATUS1       0x3A
-// #define LSM6DSOX_FIFO_STATUS2       0x3B
-
-
 LSM6DSOXClass::LSM6DSOXClass(TwoWire& wire, uint8_t slaveAddress) :
   _wire(&wire),
   _slaveAddress(slaveAddress)
@@ -84,7 +46,7 @@ int LSM6DSOXClass::begin()
   }
 
   //set the gyroscope control register to work at 833Hz, 1000 dps and in bypass mode
-  writeRegister(LSM6DSOX_CTRL2_G, 0x68); // 0x68 417Hz | 0x78 833Hz
+  writeRegister(LSM6DSOX_CTRL2_G, 0x78); // 0x68 417Hz | 0x78 833Hz
 
   /*
   odr/4
@@ -98,14 +60,14 @@ int LSM6DSOXClass::begin()
 
   // Set the Accelerometer control register to work at 833Hz, 8g, and in bypass mode and enable ODR/4
   // low pass filter (check figure9 of LSM6DSOX's datasheet)
-  writeRegister(LSM6DSOX_CTRL1_XL, 0x6C); // 0x6C 417Hz | 0x7C 833Hz
+  writeRegister(LSM6DSOX_CTRL1_XL, 0x7C); // 0x6C 417Hz | 0x7C 833Hz
 
   // set gyroscope power mode to high performance and bandwidth to 16 MHz
   writeRegister(LSM6DSOX_CTRL7_G, 0x00);
 
 
   // set fifo gyro/accel data rate to 417Hz
-  writeRegister(LSM6DSOX_FIFO_CTRL3, 0x66); // 0x66 417Hz | 0x77 833Hz
+  writeRegister(LSM6DSOX_FIFO_CTRL3, 0x77); // 0x66 417Hz | 0x77 833Hz
 
   // set FIFO to bypass mode to flush data
   //writeRegister(LSM6DSOX_FIFO_CTRL4, 0x00);
@@ -168,6 +130,33 @@ int LSM6DSOXClass::readAcceleration(float& x, float& y, float& z)
   return 1;
 }
 
+int LSM6DSOXClass::readFifoAcceleration(float& x, float& y, float& z)
+{
+  int16_t data_raw[3];
+  uint8_t data[6];
+
+  if (!readRegisters(LSM6DSOX_FIFO_DATA_OUT_X_L, data, 6)) {
+    x = NAN;
+    y = NAN;
+    z = NAN;
+    printf("readFifoAcceleration() readRegisters() error!\n");
+    return 0;
+  }
+
+  data_raw[0] = ((int16_t)data[1] << 8) | data[0];
+  data_raw[1] = ((int16_t)data[3] << 8) | data[2];
+  data_raw[2] = ((int16_t)data[5] << 8) | data[4];
+
+  // TODO: set g programmatically during init
+  const float g = 8.0f;
+
+  x = data_raw[0] * g / 32768.0;
+  y = data_raw[1] * g / 32768.0;
+  z = data_raw[2] * g / 32768.0;
+
+  return 1;
+}
+
 int LSM6DSOXClass::accelerationAvailable()
 {
   if (readRegister(LSM6DSOX_STATUS_REG) & 0x01) {
@@ -201,6 +190,34 @@ int LSM6DSOXClass::readGyroscope(float& x, float& y, float& z)
   x = data[0] * dps / 32768.0;
   y = data[1] * dps / 32768.0;
   z = data[2] * dps / 32768.0;
+
+  return 1;
+}
+
+int LSM6DSOXClass::readFifoGyroscope(float& x, float& y, float& z)
+{
+  int16_t data_raw[3];
+  uint8_t data[6];
+
+  if (!readRegisters(LSM6DSOX_FIFO_DATA_OUT_X_L, data, 6))
+  {
+    x = NAN;
+    y = NAN;
+    z = NAN;
+    printf("readFifoGyroscope() readRegisters() error!\n");
+    return 0;
+  }
+
+  data_raw[0] = ((int16_t)data[1] << 8) | data[0];
+  data_raw[1] = ((int16_t)data[3] << 8) | data[2];
+  data_raw[2] = ((int16_t)data[5] << 8) | data[4];
+
+  // TODO: set dps programmatically during init
+  const float dps = 1000.0f;
+
+  x = data_raw[0] * dps / 32768.0;
+  y = data_raw[1] * dps / 32768.0;
+  z = data_raw[2] * dps / 32768.0;
 
   return 1;
 }
