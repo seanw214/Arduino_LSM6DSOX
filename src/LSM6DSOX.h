@@ -17,7 +17,9 @@
   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 */
 
-#include "../../WirePort/Wire.h"
+#include "../../libi2c-c/include/i2c/i2c.h"
+//#include "../../WirePort/Wire.h"
+#include <cstring>
 #include <math.h>
 #include <iostream>
 
@@ -71,10 +73,13 @@ class LSM6DSOXClass
 public:
   int fd;
 
-  LSM6DSOXClass(TwoWire &wire, uint8_t slaveAddress);
+  // LSM6DSOXClass(TwoWire &wire, uint8_t slaveAddress, const int bus);
+  LSM6DSOXClass(const int bus);
   ~LSM6DSOXClass();
 
-  int begin();
+  //int begin();
+  int begin(void);
+  int setup(void);
   void end();
 
   // Accelerometer
@@ -100,10 +105,16 @@ public:
 
 private:
   int writeRegister(uint8_t address, uint8_t value);
-  TwoWire *_wire;
-  uint8_t _slaveAddress;
+  // TwoWire *_wire;
+  // uint8_t _slaveAddress;
+  I2CDevice device;
+  I2C_READ_HANDLE i2c_read_handle;
+  I2C_WRITE_HANDLE i2c_write_handle;
+  int _bus;
 };
 
+/*
 extern LSM6DSOXClass IMU_LSM6DSOX;
 #undef IMU
 #define IMU IMU_LSM6DSOX
+*/

@@ -19,16 +19,153 @@
 
 #include "LSM6DSOX.h"
 
-LSM6DSOXClass::LSM6DSOXClass(TwoWire& wire, uint8_t slaveAddress) :
-  _wire(&wire),
-  _slaveAddress(slaveAddress)
+/*
+LSM6DSOXClass::LSM6DSOXClass(TwoWire &wire, uint8_t slaveAddress) : _wire(&wire),
+                                                                    _slaveAddress(slaveAddress)
 {
+
+}
+*/
+
+LSM6DSOXClass::LSM6DSOXClass(const int bus) : _bus(bus)         
+{
+  /* Init i2c device */
+  memset(&device, 0, sizeof(device));
+  i2c_init_device(&device);
+  unsigned int addr = 106, iaddr_bytes = 1, page_bytes = 1;
+
+  device.bus = _bus;
+  device.addr = addr & 0x3ff;
+  device.page_bytes = page_bytes;
+  device.iaddr_bytes = iaddr_bytes;
+
+  i2c_read_handle = i2c_ioctl_read;
+  i2c_write_handle = i2c_ioctl_write;
 }
 
 LSM6DSOXClass::~LSM6DSOXClass()
 {
 }
 
+int LSM6DSOXClass::begin(void)
+{
+  ssize_t ret = 0;
+  unsigned char buf[1] = {0};
+  size_t buf_size = sizeof(buf);
+
+  ret = i2c_read_handle(&device, LSM6DSOX_WHO_AM_I_REG, buf, buf_size);
+  if (ret == -1 || (size_t)ret != buf_size)
+  {
+    fprintf(stderr, "Read i2c error!\n");
+    return 0;
+  }
+
+  if (buf[0] != 0x6C) { return 0; }
+
+  return 1;
+}
+
+int LSM6DSOXClass::setup(void)
+{
+  ssize_t ret = 0;
+  unsigned char buf[1] = {0};
+  size_t buf_size = sizeof(buf);
+
+  buf[0] = 0x78; //set the gyroscope control register to work at 833Hz, 1000 dps and in bypass mode
+  ret = i2c_write_handle(&device, LSM6DSOX_CTRL2_G, buf, buf_size);
+  if (ret == -1 || (size_t)ret != buf_size)
+  {
+    fprintf(stderr, "Write i2c error!\n");
+    return 0;
+  }
+
+  buf[0] = 0x00; // odr/4, hpf reference mode disabled, fast settle mode disabled, high pass slope disabled, accelerometer full scale mode disabled , lpf on 6d disabled
+  ret = i2c_write_handle(&device, LSM6DSOX_CTRL8_XL, buf, buf_size);
+  if (ret == -1 || (size_t)ret != buf_size)
+  {
+    fprintf(stderr, "Write i2c error!\n");
+    return 0;
+  }
+
+  buf[0] = 0x7C; // set the accelerometer control register to work at 833Hz, 8g, and in bypass mode and enable ODR/4
+  ret = i2c_write_handle(&device, LSM6DSOX_CTRL1_XL, buf, buf_size);
+  if (ret == -1 || (size_t)ret != buf_size)
+  {
+    fprintf(stderr, "Write i2c error!\n");
+    return 0;
+  }
+
+  buf[0] = 0x00; // set gyroscope power mode to high performance and bandwidth to 16 MHz
+  ret = i2c_write_handle(&device, LSM6DSOX_CTRL7_G, buf, buf_size);
+  if (ret == -1 || (size_t)ret != buf_size)
+  {
+    fprintf(stderr, "Write i2c error!\n");
+    return 0;
+  }
+
+  buf[0] = 0x77; // set fifo gyro/accel data rate to 833Hz
+  ret = i2c_write_handle(&device, LSM6DSOX_FIFO_CTRL3, buf, buf_size);
+  if (ret == -1 || (size_t)ret != buf_size)
+  {
+    fprintf(stderr, "Write i2c error!\n");
+    return 0;
+  }
+
+  buf[0] = 0x00; // set FIFO to bypass mode to flush data
+  ret = i2c_write_handle(&device, LSM6DSOX_FIFO_CTRL4, buf, buf_size);
+  if (ret == -1 || (size_t)ret != buf_size)
+  {
+    fprintf(stderr, "Write i2c error!\n");
+    return 0;
+  }
+
+  buf[0] = 0x08; // set INT1 to trigger when FIFO threshold is reached
+  ret = i2c_write_handle(&device, LSM6DSOX_INT1_CTRL, buf, buf_size);
+  if (ret == -1 || (size_t)ret != buf_size)
+  {
+    fprintf(stderr, "Write i2c error!\n");
+    return 0;
+  }
+
+  // set FIFO watermark level
+  // 1 sensor sample (x y z) = 3 16-bit words
+  // 16 gyro samples * 3 axes = 48 16-bit words
+  // 16 accel samples * 3 axes = 48 16-bit words
+  // 32 total samples = FIFO watermark level 96 words
+  buf[0] = 0x60;
+  ret = i2c_write_handle(&device, LSM6DSOX_FIFO_CTRL1, buf, buf_size);
+  if (ret == -1 || (size_t)ret != buf_size)
+  {
+    fprintf(stderr, "Write i2c error!\n");
+    return 0;
+  }
+
+  buf[0] = 0x80; // stop FIFO at watermark threshold level 0x80
+  ret = i2c_write_handle(&device, LSM6DSOX_FIFO_CTRL2, buf, buf_size);
+  if (ret == -1 || (size_t)ret != buf_size)
+  {
+    fprintf(stderr, "Write i2c error!\n");
+    return 0;
+  }
+
+  // Set FIFO operation mode. Available values are:
+  // 0x00 LSM6DSOX_BYPASS_MODE: FIFO is not used, the buffer content is cleared
+  // LSM6DSOX_FIFO_MODE: bufer continues filling until it becomes full. Then it stops collecting data.
+  // 0x06 LSM6DSOX_STREAM_MODE: continuous mode. Older data are replaced by the new data.
+  // LSM6DSOX_STREAM_TO_FIFO_MODE: FIFO buffer starts operating in Continuous mode and switches to FIFO mode when an event condition occurs.
+  // LSM6DSOX_BYPASS_TO_STREAM_MODE: FIFO buffer starts operating in Bypass mode and switches to Continuous mode when an event condition occurs.
+  buf[0] = 0x06;
+  ret = i2c_write_handle(&device, LSM6DSOX_FIFO_CTRL4, buf, buf_size);
+  if (ret == -1 || (size_t)ret != buf_size)
+  {
+    fprintf(stderr, "Write i2c error!\n");
+    return 0;
+  }
+
+  return 1;
+}
+
+/*
 int LSM6DSOXClass::begin()
 {
   int ret = _wire->begin();
@@ -48,14 +185,12 @@ int LSM6DSOXClass::begin()
   //set the gyroscope control register to work at 833Hz, 1000 dps and in bypass mode
   writeRegister(LSM6DSOX_CTRL2_G, 0x78); // 0x68 417Hz | 0x78 833Hz
 
-  /*
-  odr/4
-  hpf reference mode disabled
-  fast settle mode disabled
-  high pass slope disabled
-  accelerometer full scale mode disabled 
-  lpf on 6d disabled
-  */
+  // odr/4
+  // hpf reference mode disabled
+  // fast settle mode disabled
+  // high pass slope disabled
+  // accelerometer full scale mode disabled 
+  // lpf on 6d disabled
   writeRegister(LSM6DSOX_CTRL8_XL, 0x00); // full scale mode enabled 0x02
 
   // Set the Accelerometer control register to work at 833Hz, 8g, and in bypass mode and enable ODR/4
@@ -76,38 +211,38 @@ int LSM6DSOXClass::begin()
   writeRegister(LSM6DSOX_INT1_CTRL, 0x08);
 
   // set FIFO watermark level
-  /*
-  1 sensor sample (x y z) = 3 16-bit words
-
-  16 gyro samples * 3 axes = 48 16-bit words
-  16 accel samples * 3 axes = 48 16-bit words
-
-  32 total samples = FIFO watermark level 96 words
-  */
+  // 1 sensor sample (x y z) = 3 16-bit words
+  // 16 gyro samples * 3 axes = 48 16-bit words
+  // 16 accel samples * 3 axes = 48 16-bit words
+  // 32 total samples = FIFO watermark level 96 words
   writeRegister(LSM6DSOX_FIFO_CTRL1, 0x60);
 
   // stop FIFO at watermark threshold level 0x80 | do not stop FIFO 0x00
   writeRegister(LSM6DSOX_FIFO_CTRL2, 0x80);
 
-  /** Set FIFO operation mode. Available values are:
-   * 0x00 LSM6DSOX_BYPASS_MODE: FIFO is not used, the buffer content is cleared
-   * LSM6DSOX_FIFO_MODE: bufer continues filling until it becomes full. Then it stops collecting data.
-   * 0x06 LSM6DSOX_STREAM_MODE: continuous mode. Older data are replaced by the new data.
-   * LSM6DSOX_STREAM_TO_FIFO_MODE: FIFO buffer starts operating in Continuous mode and switches to FIFO mode when an event condition occurs.
-   * LSM6DSOX_BYPASS_TO_STREAM_MODE: FIFO buffer starts operating in Bypass mode and switches to Continuous mode when an event condition occurs.
-  **/
+  // Set FIFO operation mode. Available values are:
+  // 0x00 LSM6DSOX_BYPASS_MODE: FIFO is not used, the buffer content is cleared
+  // LSM6DSOX_FIFO_MODE: bufer continues filling until it becomes full. Then it stops collecting data.
+  // 0x06 LSM6DSOX_STREAM_MODE: continuous mode. Older data are replaced by the new data.
+  // LSM6DSOX_STREAM_TO_FIFO_MODE: FIFO buffer starts operating in Continuous mode and switches to FIFO mode when an event condition occurs.
+  // LSM6DSOX_BYPASS_TO_STREAM_MODE: FIFO buffer starts operating in Bypass mode and switches to Continuous mode when an event condition occurs.
+  
   writeRegister(LSM6DSOX_FIFO_CTRL4, 0x06);
 
   return 1;
 }
+*/
 
+/*
 void LSM6DSOXClass::end()
 {
   writeRegister(LSM6DSOX_CTRL2_G, 0x00);
   writeRegister(LSM6DSOX_CTRL1_XL, 0x00);
   _wire->end();
 }
+*/
 
+/*
 int LSM6DSOXClass::readAcceleration(float& x, float& y, float& z)
 {
   int16_t data[3];
@@ -165,6 +300,7 @@ int LSM6DSOXClass::accelerationAvailable()
 
   return 0;
 }
+*/
 
 float LSM6DSOXClass::accelerationSampleRate()
 {
@@ -172,6 +308,7 @@ float LSM6DSOXClass::accelerationSampleRate()
   return 833.0F;
 }
 
+/*
 int LSM6DSOXClass::readGyroscope(float& x, float& y, float& z)
 {
   int16_t data[3];
@@ -241,16 +378,17 @@ int LSM6DSOXClass::readTemperature(int& temperature_deg)
   return 1;
 }
 
+
 int LSM6DSOXClass::readTemperatureFloat(float& temperature_deg)
 {
-  /* Read the raw temperature from the sensor. */
+  // Read the raw temperature from the sensor.
   int16_t temperature_raw = 0;
 
   if (readRegisters(LSM6DSOX_OUT_TEMP_L, reinterpret_cast<uint8_t*>(&temperature_raw), sizeof(temperature_raw)) != 1) {
     return 0;
   }
 
-  /* Convert to °C. */
+  // Convert to °C.
   static int const TEMPERATURE_LSB_per_DEG = 256;
   static int const TEMPERATURE_OFFSET_DEG = 25;
 
@@ -267,6 +405,7 @@ int LSM6DSOXClass::temperatureAvailable()
 
   return 0;
 }
+*/
 
 float LSM6DSOXClass::gyroscopeSampleRate()
 {
@@ -274,6 +413,7 @@ float LSM6DSOXClass::gyroscopeSampleRate()
   return 833.0F;
 }
 
+/*
 int LSM6DSOXClass::readRegister(uint8_t address)
 {
   uint8_t value;
@@ -326,9 +466,12 @@ int LSM6DSOXClass::writeRegister(uint8_t address, uint8_t value)
 
   return 1;
 }
+*/
 
+/*
 #ifdef LSM6DS_DEFAULT_SPI
 LSM6DSOXClass IMU_LSM6DSOX(LSM6DS_DEFAULT_SPI, PIN_SPI_SS1, LSM6DS_INT);
 #else
 LSM6DSOXClass IMU_LSM6DSOX(Wire, LSM6DSOX_ADDRESS);
 #endif
+*/
