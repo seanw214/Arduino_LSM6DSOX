@@ -111,13 +111,13 @@ int LSM6DSOXClass::setup(void)
     return 0;
   }
 
-  buf[0] = 0x00; // set FIFO to bypass mode to flush data
-  ret = i2c_write_handle(&device, LSM6DSOX_FIFO_CTRL4, buf, buf_size);
-  if (ret == -1 || (size_t)ret != buf_size)
-  {
-    fprintf(stderr, "Write i2c error!\n");
-    return 0;
-  }
+  // buf[0] = 0x00; // set FIFO to bypass mode to flush data
+  // ret = i2c_write_handle(&device, LSM6DSOX_FIFO_CTRL4, buf, buf_size);
+  // if (ret == -1 || (size_t)ret != buf_size)
+  // {
+  //   fprintf(stderr, "Write i2c error!\n");
+  //   return 0;
+  // }
 
   buf[0] = 0x08; // set INT1 to trigger when FIFO threshold is reached
   ret = i2c_write_handle(&device, LSM6DSOX_INT1_CTRL, buf, buf_size);
@@ -163,6 +163,18 @@ int LSM6DSOXClass::setup(void)
   }
 
   return 1;
+}
+
+size_t LSM6DSOXClass::readRegister(const int addr, unsigned char* buf, const size_t len)
+{
+  ssize_t ret = i2c_read_handle(&device, addr, buf, len);
+  if (ret == -1 || (size_t)ret != len)
+  {
+    fprintf(stderr, "Read i2c error!\n");
+    return 0;
+  }
+
+  return ret;
 }
 
 /*

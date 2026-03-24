@@ -103,6 +103,8 @@ public:
   int readRegister(uint8_t address, uint8_t* buf);
   int readRegisters(uint8_t address, uint8_t* data, size_t length);
 
+  size_t readRegister(const int addr, unsigned char* buf, const size_t len);
+
 private:
   int writeRegister(uint8_t address, uint8_t value);
   // TwoWire *_wire;
